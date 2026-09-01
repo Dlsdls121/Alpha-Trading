@@ -78,6 +78,13 @@ class OptionEngineConfig:
     adx_trending: float = 22.0
     adx_choppy: float = 15.0
 
+    # -- factor control
+    # Keys listed here are still computed and displayed, but forced to weight 0
+    # so they cannot vote. Used by the backtest to exclude factors whose inputs
+    # are synthetic under replay (historical option chains are not available),
+    # which is the difference between an honest result and a meaningless one.
+    disabled_factors: frozenset[str] = frozenset()
+
     # -- strike selection
     target_delta_lo: float = 0.42
     target_delta_hi: float = 0.62
@@ -721,6 +728,18 @@ def build_signal(symbol: str, provider, as_of: date | None = None,
                 f"ADX is {inp.trend.adx:.1f}, below {cfg.adx_choppy:.0f}. There is no "
                 f"established trend to ride, and long premium in a range decays without "
                 f"a payoff.", severity="warn")
+
+    if cfg.disabled_factors:
+        for f in sc.factors:
+            if f.key in cfg.disabled_factors:
+                # Marked unconditionally, including factors that already carried
+                # zero weight for their own reasons. The point of the note is
+                # that this factor's *input data* is untrustworthy in this run,
+                # which is true regardless of what its weight happened to be.
+                f.weight = 0.0
+                f.detail += (" [Excluded from scoring for this run: its input data is "
+                             "not available or not trustworthy here, so it is shown as "
+                             "context but does not vote.]")
 
     direction = sc.direction(cfg.direction_threshold)
     conviction = sc.conviction()

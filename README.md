@@ -123,7 +123,7 @@ pip install -e ".[dev]"
 
 python -m alpha.cli brief --explain      # everything, with full reasoning
 python -m alpha.cli serve                # dashboard at http://localhost:8000
-pytest                                   # 121 tests
+pytest                                   # 201 tests
 ```
 
 It runs in **fixture mode by default**: fully offline, deterministic, simulated
@@ -172,6 +172,90 @@ ALPHA_HOST=0.0.0.0 python -m alpha.cli serve
 
 ---
 
+## Backtesting: does any of this work?
+
+```bash
+python -m alpha.cli backtest --which both --step 5
+```
+
+The harness replays history day by day, generates signals against a **point-in-time
+view**, and resolves each against what actually followed.
+
+### How it avoids lying to you
+
+**Lookahead bias is prevented structurally, not by care.** `PointInTimeProvider`
+owns the history and hands out only the slice up to the decision date; the
+engines have no route to the rest. The test that proves it takes a signal,
+rewrites every future bar to something wildly different, regenerates, and asserts
+the output is byte-identical.
+
+**Every modelling choice is the pessimistic one:**
+
+| Choice | Why |
+|---|---|
+| Entry at the **next bar's open** | A signal from today's close cannot be filled at today's close |
+| **Stop wins ties** | When a bar touches both stop and target, intrabar order is unknowable — so assume the one that costs money |
+| Gaps fill at the **open**, not the level | Modelling a gap-through as filling at the stop is a fiction that flatters every result |
+| Costs on **every** trade | Brokerage, taxes and slippage; a wider default for options, where the spread is the real cost |
+| Positions **never held past expiry** | See below |
+
+**Every number carries its error bars.** A 60% hit rate on 40 trades has a 95%
+confidence interval of **44.6%–73.7%** — it does not exclude a coin flip.
+`verdict()` refuses to call such a result meaningful and says "sample too small
+to conclude anything" instead. It needs ~400 samples before that interval
+tightens usefully.
+
+**Two baselines**, because they answer different questions: buy-and-hold the same
+instrument (did the *exits* help?) and the universe average (did the *selection*
+help?). Picks returning 2% while the average name returned 2% is a strategy that
+has done nothing but take risk.
+
+### The null test
+
+The most important test in the repo runs the whole harness on **pure random-walk
+data**, where by construction there is nothing to find, and asserts it reports no
+edge. A backtest that finds an edge in noise will confidently endorse anything.
+
+**It immediately caught a real bug.** The option evaluator clamped the exit
+*date* to expiry (so the option priced at `t=0`, i.e. intrinsic) while still
+taking the exit *spot* from a later bar. Because intrinsic value is
+`max(0, S−K)` — convex and non-negative — feeding it a higher-variance future
+price inflated the payoff systematically. It manufactured **+19% mean return out
+of pure noise**, with 5 of 8 random seeds showing a "significant" edge. After the
+fix: mean of means +0.62%, and 0 of 8 seeds show any edge. That test is now
+permanent.
+
+### What the backtest cannot tell you
+
+- **Historical NSE option chains are not freely available.** The chain at each
+  decision date is synthesised from the underlying's trailing realised vol.
+  Prices track the real index path; **open interest is invented**. So the
+  OI factors (PCR, max pain, OI levels, OI buildup) are **excluded from scoring
+  by default** — the run tests the price-based factors, which is the part that
+  can honestly be tested.
+- **Option P&L assumes constant IV**, which is optimistic — a real IV crush makes
+  outcomes worse, never better. Read **directional accuracy** as the honest
+  number and modelled return as an upper bound.
+- **Survivorship bias**: the universe is today's constituents applied to past
+  dates. Names that were dropped are missing, and the survivors did better.
+- No corporate-action adjustment; intraday bars aren't replayed, so the VWAP
+  factor is inactive throughout.
+
+### Running it on generated data tells you nothing
+
+In fixture mode the harness **overrides its own verdict** with
+"Not a real result — generated data" and refuses to present the numbers as
+findings. The bundled generator builds paths from a drift plus a smooth sine
+cycle, and a trend-following engine predicts a sine wave nearly perfectly — a run
+like that shows a huge, entirely fake edge. Use `ALPHA_DATA_MODE=live` against
+real history before reading any number as evidence.
+
+**Do not tune factor weights on backtest output.** The attribution table is
+printed with its sample size and a warning for exactly this reason: fitting
+weights to your own history is how a strategy is overfitted and then fails live.
+
+---
+
 ## Layout
 
 ```
@@ -182,10 +266,11 @@ alpha/
   indicators/             trend, momentum, volatility, volume, options maths
   data/                   provider protocol, NSE, Yahoo, fixtures, composite, cache
   engines/                index_options.py, equity_positional.py, features.py
+  backtest/               replay, evaluate, metrics, runner, report
   api.py  cli.py
   reference/              holidays.json, universe.json  (edit these, not code)
 web/                      dashboard (index.html + static/)
-tests/                    121 tests
+tests/                    201 tests
 ```
 
 **Tuning:** thresholds live in `OptionEngineConfig` and `EquityEngineConfig` —
@@ -195,9 +280,11 @@ one place, so they can be argued with rather than hunted for.
 
 ## Known limitations
 
-- **No backtest.** There is no harness here to measure whether these signals have
-  ever worked. That is the single biggest gap and the most valuable next thing to
-  build; until it exists, treat every output as a hypothesis.
+- **The backtest has not been run on real data.** The harness exists and is
+  tested, but the network this was built on blocks market-data hosts, so every
+  run so far has been on generated history — which proves the machinery works and
+  nothing else. Until you run it against real NSE history, treat every signal as
+  an untested hypothesis.
 - **IV percentile uses realised vol as a proxy** for an IV history, because no
   free source publishes per-strike IV history. The factor text says so rather
   than passing it off as real.

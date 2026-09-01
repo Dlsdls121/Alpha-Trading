@@ -17,6 +17,8 @@ import sys
 import textwrap
 from datetime import date
 
+from alpha.backtest import BacktestConfig, HistoryStore, run_equity, run_options
+from alpha.backtest.report import render as render_backtest
 from alpha.calendar import EXPIRY_RULES, expiry_context
 from alpha.data import build_provider
 from alpha.engines import equity_positional as eq
@@ -142,6 +144,36 @@ def cmd_brief(args, provider) -> None:
     cmd_sectors(args, provider)
 
 
+def cmd_backtest(args, provider) -> None:
+    """Replay history and report whether any of this reasoning worked."""
+    from alpha.universe import Universe
+
+    universe = Universe.load()
+    symbols = list(dict.fromkeys(["NIFTY", "BANKNIFTY"] + universe.symbols))
+
+    print(f"\n  Loading {len(symbols)} symbols ({args.lookback} bars each)...", flush=True)
+    store = HistoryStore.load(provider, symbols, lookback=args.lookback)
+    if not store.frames:
+        print("  No history could be loaded. Nothing to backtest.", file=sys.stderr)
+        return
+
+    if store.synthetic:
+        print(f"  {YELLOW}! Loaded history is GENERATED, not real. Results below are "
+              f"machinery checks only.{RESET}")
+
+    cfg = BacktestConfig(step_days=args.step, horizon_bars=args.horizon,
+                         equity_horizon_bars=args.equity_horizon,
+                         exclude_synthetic_factors=not args.include_oi_factors)
+
+    which = args.which
+    if which in ("options", "both"):
+        print("  Replaying index options...", flush=True)
+        print(render_backtest(run_options(store, cfg), show_trades=args.show_trades))
+    if which in ("equity", "both"):
+        print("  Replaying positional equity...", flush=True)
+        print(render_backtest(run_equity(store, cfg, universe), show_trades=args.show_trades))
+
+
 def cmd_serve(args, provider) -> None:                      # pragma: no cover
     import uvicorn
 
@@ -186,6 +218,19 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--top", type=int, default=5)
     e.add_argument("--all", action="store_true", help="include names that were passed over")
 
+    bt = sub.add_parser("backtest", parents=[common],
+                        help="replay history and measure whether the signals worked")
+    bt.add_argument("--which", choices=["options", "equity", "both"], default="both")
+    bt.add_argument("--step", type=int, default=5,
+                    help="trading days between decision dates (default 5 = weekly)")
+    bt.add_argument("--horizon", type=int, default=10, help="option holding bars")
+    bt.add_argument("--equity-horizon", type=int, default=20, help="equity holding bars")
+    bt.add_argument("--lookback", type=int, default=1200, help="bars of history to load")
+    bt.add_argument("--show-trades", type=int, default=0, help="print N sample trades")
+    bt.add_argument("--include-oi-factors", action="store_true",
+                    help="score the OI factors too. Their inputs are synthetic under "
+                         "replay, so this makes results meaningless - off by default.")
+
     sub.add_parser("sectors", parents=[common], help="sector leadership board")
     sub.add_parser("expiries", parents=[common], help="expiry rules and dates")
     sub.add_parser("serve", parents=[common], help="run the dashboard server")
@@ -208,15 +253,18 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["ALPHA_DATA_MODE"] = args.mode
     provider = build_provider(args.mode)
 
-    for attr in ("top", "all", "symbols"):
+    fallbacks = {"top": 5, "all": False, "symbols": "NIFTY,BANKNIFTY",
+                 "which": "both", "step": 5, "horizon": 10, "equity_horizon": 20,
+                 "lookback": 1200, "show_trades": 0, "include_oi_factors": False}
+    for attr, value in fallbacks.items():
         if not hasattr(args, attr):
-            setattr(args, attr, {"top": 5, "all": False,
-                                 "symbols": "NIFTY,BANKNIFTY"}[attr])
+            setattr(args, attr, value)
 
     {"brief": cmd_brief, "options": cmd_options, "equity": cmd_equity,
-     "sectors": cmd_sectors, "expiries": cmd_expiries, "serve": cmd_serve}[args.cmd](args, provider)
+     "sectors": cmd_sectors, "expiries": cmd_expiries, "serve": cmd_serve,
+     "backtest": cmd_backtest}[args.cmd](args, provider)
 
-    if args.cmd != "serve":
+    if args.cmd not in ("serve", "backtest"):
         if not provider.is_live:
             print(f"\n  {YELLOW}! Simulated data - these are illustrations, not tradeable "
                   f"calls. Use --mode live for real NSE data.{RESET}")
