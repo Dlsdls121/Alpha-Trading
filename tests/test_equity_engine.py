@@ -8,10 +8,12 @@ import pytest
 
 from alpha.data.composite import CompositeProvider
 from alpha.data.fixtures import FixtureProvider
+from alpha.engines import equity_positional as eq
 from alpha.engines.equity_positional import (
     EquityEngineConfig, build_contexts, relative_strength, rs_line_slope, scan,
     score_symbol, sector_table,
 )
+from alpha.engines.equity_positional import analyse as eq_analyse
 from alpha.models import Category, Direction, Verdict
 from alpha.universe import Universe
 
@@ -185,3 +187,53 @@ def test_signal_serialises(provider):
 def test_fixture_mode_is_flagged(provider):
     for s in scan(provider, AS_OF):
         assert any("SIMULATED" in q for q in s.data_quality)
+
+
+# -- single-pass analysis --------------------------------------------------
+
+def test_analyse_returns_both_picks_and_sectors(provider):
+    sigs, sectors = eq_analyse(provider, AS_OF)
+    assert sigs and sectors
+    assert [r["rank"] for r in sectors] == list(range(1, len(sectors) + 1))
+
+
+def test_analyse_loads_the_universe_only_once(provider):
+    """Regression: the dashboard called scan() and sector_table() separately,
+    loading every symbol twice. Invisible against fixtures; on a live feed it
+    doubles the HTTP round trips and can push the endpoint past a hosting
+    platform's request timeout."""
+    calls = {"n": 0}
+    original = provider.ohlcv
+
+    def counted(*a, **k):
+        calls["n"] += 1
+        return original(*a, **k)
+
+    provider.ohlcv = counted
+    try:
+        eq_analyse(provider, AS_OF)
+        single = calls["n"]
+
+        calls["n"] = 0
+        eq.scan(provider, AS_OF)
+        eq.sector_table(provider, AS_OF)
+        doubled = calls["n"]
+    finally:
+        provider.ohlcv = original
+
+    assert doubled >= single * 2 - 2, "expected the separate calls to reload the universe"
+    assert single <= len(Universe.load().symbols) + 2
+
+
+def test_analyse_matches_the_separate_calls(provider):
+    sigs, sectors = eq_analyse(provider, AS_OF)
+    assert [s.symbol for s in sigs] == [s.symbol for s in eq.scan(provider, AS_OF)]
+    assert [r["sector"] for r in sectors] == \
+           [r["sector"] for r in eq.sector_table(provider, AS_OF)]
+
+
+def test_analyse_on_an_empty_universe_returns_empty_pair(provider):
+    from alpha.universe import Universe as U
+
+    empty = U(constituents=[], benchmark="NIFTY")
+    assert eq_analyse(provider, AS_OF, universe=empty) == ([], [])

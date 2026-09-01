@@ -195,16 +195,17 @@ def brief(as_of: str | None = None, top: int = 5) -> dict:
             log.exception("option signal failed for %s", sym)
             errors.append({"symbol": sym, "error": str(exc)})
 
+    # One data pass for both the picks and the sector board. Loading the
+    # universe twice doubles the HTTP round trips against a live provider, which
+    # on a slow link is the difference between this endpoint rendering and it
+    # timing out behind a hosting platform's request limit.
+    equities, sector_rows = [], []
     try:
-        equities = [s.to_dict() for s in eq.scan(p, when, eq.EquityEngineConfig(top_n=top))]
+        sigs, sector_rows = eq.analyse(p, when, eq.EquityEngineConfig(top_n=top))
+        equities = [s.to_dict() for s in sigs]
     except Exception as exc:                                  # noqa: BLE001
-        log.exception("equity scan failed")
-        equities, _ = [], errors.append({"symbol": "equity_scan", "error": str(exc)})
-
-    try:
-        sector_rows = eq.sector_table(p, when)
-    except Exception:                                         # noqa: BLE001
-        sector_rows = []
+        log.exception("equity analysis failed")
+        errors.append({"symbol": "equity_scan", "error": str(exc)})
 
     return {
         "as_of": when.isoformat(),

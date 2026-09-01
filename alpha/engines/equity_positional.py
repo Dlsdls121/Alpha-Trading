@@ -542,12 +542,27 @@ def scan(provider, as_of: date | None = None, cfg: EquityEngineConfig | None = N
     stand-aside names come back too, each still carrying its full reasoning --
     knowing why a stock was passed over is often more useful than the picks.
     """
+    signals, _ = analyse(provider, as_of, cfg, universe, include_rejected)
+    return signals
+
+
+def analyse(provider, as_of: date | None = None, cfg: EquityEngineConfig | None = None,
+            universe: Universe | None = None, include_rejected: bool = False
+            ) -> tuple[list[Signal], list[dict]]:
+    """Rank the universe AND build the sector board from a single data pass.
+
+    Loading the universe is the expensive part -- one HTTP round trip per symbol
+    against a live provider. Calling scan() and sector_table() separately loads
+    every symbol twice, which is invisible against fixtures and, on a live feed
+    over a slow link, is the difference between a page that renders and a request
+    that times out. Callers needing both (the dashboard does) should use this.
+    """
     cfg = cfg or EquityEngineConfig()
     universe = universe or Universe.load()
 
     contexts = build_contexts(provider, universe, as_of, cfg)
     if not contexts:
-        return []
+        return [], []
 
     # Read the provider's degradation notes *after* fetching, not before: most
     # fallbacks only announce themselves at the moment a fetch fails, so a
@@ -563,9 +578,10 @@ def scan(provider, as_of: date | None = None, cfg: EquityEngineConfig | None = N
 
     signals.sort(key=lambda s: (s.direction is Direction.LONG, s.conviction,
                                 s.scorecard.raw_score), reverse=True)
-    if include_rejected:
-        return signals
-    return signals[:cfg.top_n]
+    if not include_rejected:
+        signals = signals[:cfg.top_n]
+
+    return signals, _sector_rows(contexts)
 
 
 def sector_table(provider, as_of: date | None = None,
@@ -574,8 +590,11 @@ def sector_table(provider, as_of: date | None = None,
     """Sector leadership board -- the rotation picture behind the stock picks."""
     cfg = cfg or EquityEngineConfig()
     universe = universe or Universe.load()
-    contexts = build_contexts(provider, universe, as_of, cfg)
+    return _sector_rows(build_contexts(provider, universe, as_of, cfg))
 
+
+def _sector_rows(contexts: list[EquityContext]) -> list[dict]:
+    """Sector board from already-loaded contexts."""
     agg: dict[str, list[float]] = {}
     for c in contexts:
         if c.rs_short is not None:
