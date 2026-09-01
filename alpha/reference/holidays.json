@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "NSE trading holidays. THIS FILE IS DATA - edit it, do not edit code.",
+    "Only dates confirmed from a primary source belong here. 'verified_through'",
+    "is the date up to which this list has actually been checked against the NSE",
+    "circular; expiries computed beyond it are flagged in the signal's",
+    "data_quality field rather than silently trusted.",
+    "Authoritative source: NSE India > Resources > Market Timings & Holidays.",
+    "Refresh with:  python -m alpha.calendar refresh   (requires NSE reachable)"
+  ],
+  "exchange": "NSE",
+  "verified_through": "2026-09-01",
+  "holidays": [
+    {"date": "2026-11-08", "name": "Diwali Laxmi Pujan (Muhurat trading session only)"}
+  ]
+}
