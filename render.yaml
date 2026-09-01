@@ -1,0 +1,17 @@
+# One-click deploy on Render's free tier: https://render.com
+#   New > Blueprint > point it at this repo > pick this branch.
+#
+# Note the free tier sleeps after ~15 minutes idle and takes ~30s to wake.
+# That is fine for a dashboard you open a few times a day.
+services:
+  - type: web
+    name: alpha-trading
+    runtime: docker
+    plan: free
+    branch: claude/trading-platform-tablet-df45uw
+    healthCheckPath: /api/health
+    envVars:
+      # Start in fixture mode. Switch to "live" in the Render dashboard once
+      # you have confirmed NSE is reachable from the host (see RUNNING.md).
+      - key: ALPHA_DATA_MODE
+        value: fixture

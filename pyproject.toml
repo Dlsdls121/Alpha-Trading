@@ -22,6 +22,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["alpha"]
 
+# The dashboard has to travel with the package. Without this a `pip install`
+# puts alpha/ in site-packages and leaves web/ behind, so the API works and
+# every page request 404s -- which is what happens on any container deploy.
+[tool.hatch.build.targets.wheel.force-include]
+"web" = "alpha/web"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

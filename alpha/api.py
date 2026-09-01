@@ -24,7 +24,31 @@ from alpha.universe import Universe
 
 log = logging.getLogger(__name__)
 
-WEB_DIR = Path(__file__).parent.parent / "web"
+def _find_web_dir() -> Path:
+    """Locate the dashboard assets across every layout this runs in.
+
+    A pip-installed package lives in site-packages while a repo checkout does
+    not, and a container copies the assets next to the working directory. Taking
+    only the repo-relative path silently breaks every installed deployment: the
+    API keeps answering and every page request 404s, which looks like a routing
+    bug and is not one.
+    """
+    env = os.getenv("ALPHA_WEB_DIR")
+    candidates = [
+        Path(env) if env else None,
+        Path(__file__).parent / "web",           # installed wheel (force-include)
+        Path(__file__).parent.parent / "web",    # repo checkout
+        Path.cwd() / "web",                      # container working directory
+    ]
+    for c in candidates:
+        if c is not None and (c / "index.html").exists():
+            return c
+    # Nothing found: return the repo-relative guess so the error message names a
+    # sensible path rather than an empty one.
+    return Path(__file__).parent.parent / "web"
+
+
+WEB_DIR = _find_web_dir()
 INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY"]
 
 DISCLAIMER = (
@@ -207,8 +231,13 @@ if (WEB_DIR / "static").is_dir():
 def dashboard() -> FileResponse:
     index = WEB_DIR / "index.html"
     if not index.exists():
-        return JSONResponse({"error": "dashboard not built", "api": "/api/brief"},
-                            status_code=404)
+        return JSONResponse({
+            "error": "dashboard assets not found",
+            "looked_in": str(WEB_DIR),
+            "fix": "Set ALPHA_WEB_DIR to the directory containing index.html, "
+                   "or reinstall so the packaged assets are present.",
+            "api_still_works": "/api/brief",
+        }, status_code=404)
     return FileResponse(index)
 
 

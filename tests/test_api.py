@@ -108,3 +108,44 @@ def test_no_route_can_place_an_order(client):
 
     methods = {m for r in app.routes for m in (getattr(r, "methods", None) or set())}
     assert methods <= {"GET", "HEAD"}, f"the API must be read-only, found: {methods}"
+
+
+# -- deployment layout -----------------------------------------------------
+
+def test_web_dir_resolution_finds_the_dashboard():
+    """Regression: WEB_DIR was resolved only relative to the repo, so a
+    pip-installed deployment (every container deploy) served a working API and
+    404'd every page. Verified by installing into a clean venv and running from
+    an unrelated directory."""
+    from alpha.api import WEB_DIR
+
+    assert (WEB_DIR / "index.html").exists(), f"dashboard missing at {WEB_DIR}"
+    assert (WEB_DIR / "static" / "app.css").exists()
+    assert (WEB_DIR / "static" / "app.js").exists()
+
+
+def test_web_dir_honours_an_explicit_override(tmp_path, monkeypatch):
+    from alpha.api import _find_web_dir
+
+    (tmp_path / "index.html").write_text("<h1>ok</h1>")
+    monkeypatch.setenv("ALPHA_WEB_DIR", str(tmp_path))
+    assert _find_web_dir() == tmp_path
+
+
+def test_web_dir_ignores_an_override_that_has_no_dashboard(tmp_path, monkeypatch):
+    """A bad override must fall through to a real location, not break the app."""
+    from alpha.api import _find_web_dir
+
+    monkeypatch.setenv("ALPHA_WEB_DIR", str(tmp_path / "nope"))
+    assert (_find_web_dir() / "index.html").exists()
+
+
+def test_packaged_assets_are_declared_for_the_wheel():
+    """The force-include is what puts web/ inside the installed package."""
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).parent.parent
+    cfg = tomllib.loads((root / "pyproject.toml").read_text())
+    inc = cfg["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert inc.get("web") == "alpha/web"
