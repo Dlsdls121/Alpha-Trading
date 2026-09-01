@@ -123,7 +123,7 @@ pip install -e ".[dev]"
 
 python -m alpha.cli brief --explain      # everything, with full reasoning
 python -m alpha.cli serve                # dashboard at http://localhost:8000
-pytest                                   # 110 tests
+pytest                                   # 121 tests
 ```
 
 It runs in **fixture mode by default**: fully offline, deterministic, simulated
@@ -185,7 +185,7 @@ alpha/
   api.py  cli.py
   reference/              holidays.json, universe.json  (edit these, not code)
 web/                      dashboard (index.html + static/)
-tests/                    110 tests
+tests/                    121 tests
 ```
 
 **Tuning:** thresholds live in `OptionEngineConfig` and `EquityEngineConfig` —

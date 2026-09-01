@@ -151,33 +151,57 @@ def cmd_serve(args, provider) -> None:                      # pragma: no cover
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Shared flags are attached to the top-level parser *and* to every
+    # subcommand, so `alpha brief --explain` and `alpha --explain brief` both
+    # work. argparse otherwise demands globals precede the subcommand, which is
+    # the opposite of what anyone types.
+    # Every shared flag defaults to SUPPRESS. The subparser parses into the same
+    # namespace as the top-level parser, so an ordinary default would let the
+    # subcommand's default silently overwrite a flag given before it --
+    # `alpha --explain options` would quietly lose --explain. With SUPPRESS the
+    # attribute is set only when actually passed, and defaults are applied below.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--mode", choices=["fixture", "live"], default=argparse.SUPPRESS,
+                        help="fixture = simulated offline data (default); live = NSE + Yahoo")
+    common.add_argument("--as-of", type=date.fromisoformat, default=argparse.SUPPRESS,
+                        metavar="YYYY-MM-DD")
+    common.add_argument("--explain", action="store_true", default=argparse.SUPPRESS,
+                        help="print the full factor breakdown")
+    common.add_argument("--no-color", action="store_true", default=argparse.SUPPRESS)
+    common.add_argument("-v", "--verbose", action="store_true", default=argparse.SUPPRESS)
+
     p = argparse.ArgumentParser(
-        prog="alpha", description="Advisory signal engine for NSE indices and equities. "
-                                  "Analysis only - it never places orders.")
-    p.add_argument("--mode", choices=["fixture", "live"],
-                   default=os.getenv("ALPHA_DATA_MODE", "fixture"),
-                   help="fixture = simulated offline data (default); live = NSE + Yahoo")
-    p.add_argument("--as-of", type=date.fromisoformat, default=date.today(),
-                   metavar="YYYY-MM-DD")
-    p.add_argument("--explain", action="store_true", help="print the full factor breakdown")
-    p.add_argument("--no-color", action="store_true")
-    p.add_argument("-v", "--verbose", action="store_true")
+        prog="alpha", parents=[common],
+        description="Advisory signal engine for NSE indices and equities. "
+                    "Analysis only - it never places orders.")
 
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("brief", help="everything in one view")
+    sub.add_parser("brief", parents=[common], help="everything in one view")
 
-    o = sub.add_parser("options", help="NIFTY / BANKNIFTY option-buying signals")
+    o = sub.add_parser("options", parents=[common],
+                       help="NIFTY / BANKNIFTY option-buying signals")
     o.add_argument("--symbols", default="NIFTY,BANKNIFTY")
 
-    e = sub.add_parser("equity", help="positional equity candidates")
+    e = sub.add_parser("equity", parents=[common], help="positional equity candidates")
     e.add_argument("--top", type=int, default=5)
     e.add_argument("--all", action="store_true", help="include names that were passed over")
 
-    sub.add_parser("sectors", help="sector leadership board")
-    sub.add_parser("expiries", help="expiry rules and dates")
-    sub.add_parser("serve", help="run the dashboard server")
+    sub.add_parser("sectors", parents=[common], help="sector leadership board")
+    sub.add_parser("expiries", parents=[common], help="expiry rules and dates")
+    sub.add_parser("serve", parents=[common], help="run the dashboard server")
 
     args = p.parse_args(argv)
+
+    defaults = {
+        "mode": os.getenv("ALPHA_DATA_MODE", "fixture"),
+        "as_of": date.today(),
+        "explain": False,
+        "no_color": False,
+        "verbose": False,
+    }
+    for key, value in defaults.items():
+        if not hasattr(args, key):
+            setattr(args, key, value)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.ERROR,
                         format="%(levelname)s %(message)s")
 
