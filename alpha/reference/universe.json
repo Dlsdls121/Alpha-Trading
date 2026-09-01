@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Scan universe with sector tags. DATA, not code - edit freely.",
+    "Index constituents change at every review, so treat 'verified_through' as",
+    "the date this was last reconciled against the NSE index factsheet.",
+    "Sector labels drive the sector-rotation factor; they need to be consistent,",
+    "not officially exact."
+  ],
+  "verified_through": "2026-09-01",
+  "benchmark": "NIFTY",
+  "constituents": [
+    {"symbol": "RELIANCE",   "name": "Reliance Industries",     "sector": "Energy"},
+    {"symbol": "TCS",        "name": "Tata Consultancy",        "sector": "IT"},
+    {"symbol": "INFY",       "name": "Infosys",                 "sector": "IT"},
+    {"symbol": "WIPRO",      "name": "Wipro",                   "sector": "IT"},
+    {"symbol": "HDFCBANK",   "name": "HDFC Bank",               "sector": "Banking"},
+    {"symbol": "ICICIBANK",  "name": "ICICI Bank",              "sector": "Banking"},
+    {"symbol": "SBIN",       "name": "State Bank of India",     "sector": "Banking"},
+    {"symbol": "AXISBANK",   "name": "Axis Bank",               "sector": "Banking"},
+    {"symbol": "KOTAKBANK",  "name": "Kotak Mahindra Bank",     "sector": "Banking"},
+    {"symbol": "BAJFINANCE", "name": "Bajaj Finance",           "sector": "Financial Services"},
+    {"symbol": "LT",         "name": "Larsen & Toubro",         "sector": "Capital Goods"},
+    {"symbol": "BHARTIARTL", "name": "Bharti Airtel",           "sector": "Telecom"},
+    {"symbol": "ITC",        "name": "ITC",                     "sector": "FMCG"},
+    {"symbol": "HINDUNILVR", "name": "Hindustan Unilever",      "sector": "FMCG"},
+    {"symbol": "NESTLEIND",  "name": "Nestle India",            "sector": "FMCG"},
+    {"symbol": "MARUTI",     "name": "Maruti Suzuki",           "sector": "Auto"},
+    {"symbol": "TATAMOTORS", "name": "Tata Motors",             "sector": "Auto"},
+    {"symbol": "TITAN",      "name": "Titan Company",           "sector": "Consumer"},
+    {"symbol": "ASIANPAINT", "name": "Asian Paints",            "sector": "Consumer"},
+    {"symbol": "SUNPHARMA",  "name": "Sun Pharmaceutical",      "sector": "Pharma"},
+    {"symbol": "POWERGRID",  "name": "Power Grid Corporation",  "sector": "Power"},
+    {"symbol": "NTPC",       "name": "NTPC",                    "sector": "Power"},
+    {"symbol": "TATASTEEL",  "name": "Tata Steel",              "sector": "Metals"},
+    {"symbol": "JSWSTEEL",   "name": "JSW Steel",               "sector": "Metals"},
+    {"symbol": "ULTRACEMCO", "name": "UltraTech Cement",        "sector": "Cement"},
+    {"symbol": "COALINDIA",  "name": "Coal India",              "sector": "Mining"},
+    {"symbol": "ADANIENT",   "name": "Adani Enterprises",       "sector": "Conglomerate"}
+  ]
+}
